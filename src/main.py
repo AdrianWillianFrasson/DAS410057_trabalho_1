@@ -1,4 +1,4 @@
-from collections import deque
+from search_algorithm import BFS, UCS
 
 INITIAL_STATE = (
   "bar",  # Waiter location: "bar", "table1", "table2", "table3", "table4"
@@ -16,9 +16,11 @@ LOCATIONS_DISTANCE = {
   ("bar", "table3"): 3,
   ("bar", "table4"): 3,
   ("table1", "table2"): 1,
+  ("table1", "table3"): 1,
+  ("table1", "table4"): 1,
   ("table2", "table3"): 1,
+  ("table2", "table4"): 1,
   ("table3", "table4"): 1,
-  ("table4", "table1"): 1,
 }
 
 
@@ -32,7 +34,7 @@ def get_distance(location1, location2):
   if (location2, location1) in LOCATIONS_DISTANCE:
     return LOCATIONS_DISTANCE[(location2, location1)]
 
-  return 1  # fallback
+  raise ValueError(f"No distance defined between {location1} and {location2}")
 
 
 def goal(state):
@@ -52,14 +54,13 @@ def state_actions(state):
   result = []
 
   # 1. Barista can preper drinks (if there is any pending orders)
-  if location == "bar":
-    for i, drink in enumerate(orders):
-      drink_kind = drink[1]
-      cost = 3 if drink_kind == "cold" else 5
-      new_orders = orders[:i] + orders[i + 1 :]  # Remove from orders
-      new_prepared = prepared + (drink,)  # Add to prepared
-      new_state = (location, tray, inventory, new_orders, new_prepared, tables_to_clean)
-      result.append((new_state, f"prepare drink: {drink}", cost))
+  for i, drink in enumerate(orders):
+    drink_kind = drink[1]
+    cost = 3 if drink_kind == "cold" else 5
+    new_orders = orders[:i] + orders[i + 1 :]
+    new_prepared = prepared + (drink,)
+    new_state = (location, tray, inventory, new_orders, new_prepared, tables_to_clean)
+    result.append((cost, new_state, f"prepare drink: {drink}"))
 
   # 2. Waiter can walk to another location
   possible_locations = ["bar", "table1", "table2", "table3", "table4"]
@@ -69,15 +70,15 @@ def state_actions(state):
       dist = get_distance(location, new_location)
       cost = dist / speed
       new_state = (new_location, tray, inventory, orders, prepared, tables_to_clean)
-      result.append((new_state, f"go: {new_location}", cost))
+      result.append((cost, new_state, f"go: {new_location}"))
 
   # 3. Waiter can take or return the tray
   if location == "bar" and not tray:
     new_state = (location, True, inventory, orders, prepared, tables_to_clean)
-    result.append((new_state, "take tray", 1))
+    result.append((1, new_state, "take tray"))
   if location == "bar" and tray:
     new_state = (location, False, inventory, orders, prepared, tables_to_clean)
-    result.append((new_state, "return tray", 1))
+    result.append((1, new_state, "return tray"))
 
   # 4. Waiter can pickup drinks from the bar without a tray
   if location == "bar" and not tray and len(inventory) == 0:
@@ -85,7 +86,7 @@ def state_actions(state):
       new_prepared = prepared[:i] + prepared[i + 1 :]
       new_inventory = inventory + (drink,)
       new_state = (location, tray, new_inventory, orders, new_prepared, tables_to_clean)
-      result.append((new_state, f"pickup drink: {drink}", 1))
+      result.append((1, new_state, f"pickup drink: {drink}"))
 
   # 5. Waiter can pickup drinks from the bar with a tray
   if location == "bar" and tray and len(inventory) < 3:
@@ -98,45 +99,21 @@ def state_actions(state):
       if location == table:
         new_inventory = inventory[:i] + inventory[i + 1 :]
         new_state = (location, tray, new_inventory, orders, prepared, tables_to_clean)
-        result.append((new_state, f"deliver drink:{drink}", 1))
+        result.append((1, new_state, f"deliver drink: {drink}"))
 
   # 7. Waiter can clean dirty tables
-  if not tray and len(inventory) == 0:
-    for i, table in enumerate(tables_to_clean):
-      if location == table:
-        new_tables = tables_to_clean[:i] + tables_to_clean[i + 1 :]
-        new_state = (location, tray, inventory, orders, prepared, new_tables)
-        result.append((new_state, f"clean table: {table}", 1))
-        break
+  if location in tables_to_clean and not tray and len(inventory) == 0:
+    cost = 4 if location == "table3" else 2
+    new_tables = tuple(t for t in tables_to_clean if t != location)
+    new_state = (location, tray, inventory, orders, prepared, new_tables)
+    result.append((cost, new_state, f"clean table: {location}"))
 
   return result
 
 
-def BFS(initial_state):
-  queue = deque()
-  queue.append((initial_state, [], 0))  # (state, actions steps, total cost)
-
-  visited = set()  # Visited nodes
-
-  while queue:
-    state, actions, total_cost = queue.popleft()
-
-    if goal(state):
-      return visited, actions, total_cost
-
-    if state in visited:
-      continue
-
-    visited.add(state)
-
-    for new_state, new_action, new_cost in state_actions(state):
-      queue.append((new_state, actions + [new_action], total_cost + new_cost))
-
-  return None
-
-
 def main():
-  visited, actions, cost = BFS(INITIAL_STATE)
+  cost, visited, actions = UCS(INITIAL_STATE, goal, state_actions)
+  # cost, visited, actions = BFS(INITIAL_STATE, goal, state_actions)
 
   print(f"Visited nodes: {len(visited)}")
   print(f"Total Cost: {cost}")
