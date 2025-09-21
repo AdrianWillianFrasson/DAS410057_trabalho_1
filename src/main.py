@@ -1,3 +1,4 @@
+import time
 from search_algorithm import BFS, UCS, A_star
 
 
@@ -45,7 +46,13 @@ def get_distance(location1, location2):
 def goal(state):
   location, tray, inventory, orders, prepared, tables_to_clean = state
 
-  return not tray and len(orders) == 0 and len(prepared) == 0 and len(inventory) == 0 and len(tables_to_clean) == 0
+  return (
+    not tray
+    and len(orders) == 0
+    and len(prepared) == 0
+    and len(inventory) == 0
+    and len(tables_to_clean) == 0
+  )
 
 
 def state_actions(state):
@@ -58,7 +65,9 @@ def state_actions(state):
     cost = 3.0 if drink_kind == "cold" else 5.0
     new_orders = orders[:i] + orders[i + 1 :]
     new_prepared = prepared + (drink,)
-    new_state = canonical_state((location, tray, inventory, new_orders, new_prepared, tables_to_clean))
+    new_state = canonical_state(
+      (location, tray, inventory, new_orders, new_prepared, tables_to_clean)
+    )
     result.append((cost, new_state, f"[{cost}] prepare drink: {drink}"))
 
   # 2. Waiter can walk to another location
@@ -68,7 +77,9 @@ def state_actions(state):
       speed = 1.0 if tray else 2.0
       dist = get_distance(location, new_location)
       cost = dist / speed
-      new_state = canonical_state((new_location, tray, inventory, orders, prepared, tables_to_clean))
+      new_state = canonical_state(
+        (new_location, tray, inventory, orders, prepared, tables_to_clean)
+      )
       result.append((cost, new_state, f"[{cost}] go: {new_location}"))
 
   # 3. Waiter can take or return the tray
@@ -87,7 +98,9 @@ def state_actions(state):
     for i, drink in enumerate(prepared):
       new_prepared = prepared[:i] + prepared[i + 1 :]
       new_inventory = inventory + (drink,)
-      new_state = canonical_state((location, tray, new_inventory, orders, new_prepared, tables_to_clean))
+      new_state = canonical_state(
+        (location, tray, new_inventory, orders, new_prepared, tables_to_clean)
+      )
       result.append((cost, new_state, f"[{cost}] pickup drink: {drink}"))
 
   # 5. Waiter can pickup drinks from the bar with a tray
@@ -96,8 +109,12 @@ def state_actions(state):
     for i, drink in enumerate(prepared):
       new_prepared = prepared[:i] + prepared[i + 1 :]
       new_inventory = inventory + (drink,)
-      new_state = canonical_state((location, tray, new_inventory, orders, new_prepared, tables_to_clean))
-      result.append((cost, new_state, f"[{cost}] pickup drink (tray - {len(new_inventory)}): {drink}"))
+      new_state = canonical_state(
+        (location, tray, new_inventory, orders, new_prepared, tables_to_clean)
+      )
+      result.append(
+        (cost, new_state, f"[{cost}] pickup drink (tray - {len(new_inventory)}): {drink}")
+      )
 
   # 6. Waiter can deliver drinks if he is at the right table
   if len(inventory) > 0:
@@ -106,7 +123,9 @@ def state_actions(state):
       table, kind = drink
       if location == table:
         new_inventory = inventory[:i] + inventory[i + 1 :]
-        new_state = canonical_state((location, tray, new_inventory, orders, prepared, tables_to_clean))
+        new_state = canonical_state(
+          (location, tray, new_inventory, orders, prepared, tables_to_clean)
+        )
         result.append((cost, new_state, f"[{cost}] deliver drink: {drink}"))
 
   # 7. Waiter can clean dirty tables
@@ -135,10 +154,13 @@ def main():
     )
   )
 
-  cost, visited, actions = A_star(initial_state, goal, state_actions)
+  time_start = time.perf_counter()
+  # cost, visited, actions = A_star(initial_state, goal, state_actions)
   # cost, visited, actions = UCS(initial_state, goal, state_actions)
-  # cost, visited, actions = BFS(initial_state, goal, state_actions)
+  cost, visited, actions = BFS(initial_state, goal, state_actions)
+  time_end = time.perf_counter()
 
+  print(f"Time: {time_end - time_start:.4f} seconds")
   print(f"Number of nodes: {len(visited)}")
   print(f"Total cost: {cost}")
 
