@@ -3,7 +3,7 @@ from collections import deque
 
 
 # A* Search ----------------------------------------------------------------------------------------
-def A_star(initial_state, goal, state_actions):
+def A_star(initial_state, goal, state_actions, heuristic):
   frontier = []
   # (f = h + total_cost, total_cost, state, actions_steps)
   heapq.heappush(frontier, (heuristic(initial_state), 0, initial_state, []))
@@ -30,7 +30,7 @@ def A_star(initial_state, goal, state_actions):
   return None
 
 
-def heuristic(state):
+def heuristic_v1(state):
   location, tray, inventory, orders, prepared, tables_to_clean = state
   h = 0
 
@@ -48,6 +48,10 @@ def heuristic(state):
 
   return h
 
+def heuristic_v2(state):
+    _, _, inventory, orders, prepared, tables_to_clean = state
+    tasks_left = len(inventory) + len(orders) + len(prepared) + len(tables_to_clean)
+    return tasks_left * 2
 
 # Uniform-Cost Search ------------------------------------------------------------------------------
 def UCS(initial_state, goal, state_actions):
@@ -96,3 +100,42 @@ def BFS(initial_state, goal, state_actions):
       queue.append((total_cost + new_cost, new_state, actions + [new_action]))
 
   return None
+
+# Depth-Limited Search (DFS com limite)
+def DLS(state, goal, state_actions, limit, actions=None, cost=0, visited=None):
+    if actions is None:
+        actions = []
+    if visited is None:
+        visited = set()
+
+    if goal(state):
+        return cost, visited, actions
+
+    if limit == 0:
+        return None  
+
+    visited.add(state)
+
+    for new_cost, new_state, new_action in state_actions(state):
+        if new_state not in visited:
+            result = DLS(
+                new_state,
+                goal,
+                state_actions,
+                limit - 1,
+                actions + [new_action],
+                cost + new_cost,
+                visited,
+            )
+            if result is not None:
+                return result
+    return None
+
+
+def IDDFS(initial_state, goal, state_actions, max_depth=50):
+    visited = set()
+    for depth in range(1, max_depth + 1):
+        result = DLS(initial_state, goal, state_actions, depth, visited=visited)
+        if result is not None:
+            return result
+    return float("inf"), visited, []

@@ -1,5 +1,30 @@
 import time
-from search_algorithm import BFS, UCS, A_star
+from search_algorithm import BFS, UCS, A_star, DLS, IDDFS, heuristic_v1, heuristic_v2
+
+def get_problems():
+    return {
+        1: {
+            "orders": (("table2", "cold"), ("table2", "cold")),
+            "tables_to_clean": ("table3", "table4"),
+        },
+        2: {
+            "orders": (("table3", "cold"), ("table3", "cold"),
+                       ("table3", "hot"), ("table3", "hot")),
+            "tables_to_clean": ("table1",),
+        },
+        3: {
+            "orders": (("table4", "hot"), ("table4", "hot"),
+                       ("table1", "hot"), ("table1", "hot")),
+            "tables_to_clean": ("table3",),
+        },
+        4: {
+            "orders": (("table4", "cold"), ("table4", "cold"),
+                       ("table1", "cold"), ("table1", "cold"),
+                       ("table3", "hot"), ("table3", "hot"),
+                       ("table3", "hot"), ("table3", "hot")),
+            "tables_to_clean": ("table2",),
+        },
+    }
 
 
 def canonical_state(state):
@@ -157,7 +182,8 @@ def main():
   time_start = time.perf_counter()
   # cost, visited, actions = A_star(initial_state, goal, state_actions)
   # cost, visited, actions = UCS(initial_state, goal, state_actions)
-  cost, visited, actions = BFS(initial_state, goal, state_actions)
+  # cost, visited, actions = BFS(initial_state, goal, state_actions)
+  cost, visited, actions = IDDFS(initial_state, goal, state_actions, max_depth=20)
   time_end = time.perf_counter()
 
   print(f"Time: {time_end - time_start:.4f} seconds")
@@ -169,5 +195,45 @@ def main():
     print(f" - {step}")
 
 
+def run_experiments():
+    problems = get_problems()
+    algorithms = {
+        "BFS": BFS,
+        "UCS": UCS,
+        "IDDFS": IDDFS,
+        "A*_h1": lambda s, g, a: A_star(s, g, a, heuristic=heuristic_v1),
+        "A*_h2": lambda s, g, a: A_star(s, g, a, heuristic=heuristic_v2),
+    }
+
+    results = {p: {} for p in problems}
+
+    for pid, pdata in problems.items():
+        print(f"\n=== Running Problem {pid} ===")
+        initial_state = canonical_state(("bar", False, (), pdata["orders"], (), pdata["tables_to_clean"]))
+
+        for name, algo in algorithms.items():
+            start = time.perf_counter()
+            cost, visited, actions = algo(initial_state, goal, state_actions)
+            end = time.perf_counter()
+            runtime = end - start
+            n_nodes = len(visited) if isinstance(visited, (set, dict)) else 0
+
+            results[pid][name] = {"time": runtime, "nodes": n_nodes, "cost": cost}
+
+            print(f"{name}: time={runtime:.4f}s, nodes={n_nodes}, cost={cost}")
+
+    for metric in ["time", "nodes", "cost"]:
+        plt.figure()
+        for pid in problems:
+            vals = [results[pid][alg][metric] for alg in algorithms]
+            plt.plot(list(algorithms.keys()), vals, marker="o", label=f"Problem {pid}")
+        plt.title(f"{metric.capitalize()} per Algorithm")
+        plt.ylabel(metric.capitalize())
+        plt.xlabel("Algorithm")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(f"results_{metric}.png")
+        plt.close()
+
 if __name__ == "__main__":
-  main()
+    run_experiments()
