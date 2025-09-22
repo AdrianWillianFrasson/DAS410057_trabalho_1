@@ -1,49 +1,65 @@
 import heapq
 import itertools
+from time import perf_counter
 
-# --- Define Constants ---
 # Action Durations
 TIME_TO_MAKE_COLD = 3.0
 TIME_TO_MAKE_HOT = 5.0
 TIME_TO_PICKUP = 1.0
 TIME_TO_DELIVER = 1.0
 
-# Waiter Movement
-TRAVEL_TIMES = {
-  ("bar", "table1"): 2.0,
-  ("bar", "table2"): 3.0,
-  ("table1", "table2"): 1.0,
+# Distances between locations [meters]
+LOCATIONS_DISTANCE = {
+  ("bar", "table1"): 2,
+  ("bar", "table2"): 2,
+  ("bar", "table3"): 3,
+  ("bar", "table4"): 3,
+  ("table1", "table2"): 1,
+  ("table1", "table3"): 1,
+  ("table1", "table4"): 1,
+  ("table2", "table3"): 1,
+  ("table2", "table4"): 1,
+  ("table3", "table4"): 1,
 }
 
 
-def get_travel_time(loc1, loc2):
-  if loc1 == loc2:
-    return 0.0
-  if (loc1, loc2) in TRAVEL_TIMES:
-    return TRAVEL_TIMES[(loc1, loc2)]
-  return TRAVEL_TIMES[(loc2, loc1)]
+def get_distance(location1, location2):
+  if location1 == location2:
+    return 0
+
+  if (location1, location2) in LOCATIONS_DISTANCE:
+    return LOCATIONS_DISTANCE[(location1, location2)]
+
+  if (location2, location1) in LOCATIONS_DISTANCE:
+    return LOCATIONS_DISTANCE[(location2, location1)]
+
+  raise ValueError(f"No distance defined between {location1} and {location2}")
 
 
 def canonical_state(state):
   """Converts the state to a consistent, hashable format."""
-  time, w_loc, w_inv, orders, prep, delivered, b_status, w_status = state
+  time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
+
   return (
     time,
-    w_loc,
-    w_inv,
+    tuple(sorted(b_status)),
+    tuple(sorted(w_status)),
+    location,
+    tray,
+    tuple(sorted(inventory)),
     tuple(sorted(orders)),
-    tuple(sorted(prep)),
-    tuple(sorted(delivered)),
-    b_status,
-    w_status,
+    tuple(sorted(prepared)),
+    tuple(sorted(tables_to_clean)),
   )
 
 
 def get_next_states(state):
   """Generates all possible successor states from the current state."""
-  current_time, w_loc, w_inv, orders, prep, delivered, b_status, w_status = state
+  current_time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = (
+    state
+  )
 
-  # --- 1. Find the time of the next event ---
+  # 1. Find the time of the next event -----------------------------------------
   b_finish_time = b_status[2] if b_status[0] != "idle" else float("inf")
   w_finish_time = w_status[2] if w_status[0] != "idle" else float("inf")
   next_event_time = min(b_finish_time, w_finish_time)
@@ -51,31 +67,32 @@ def get_next_states(state):
   if next_event_time == float("inf"):
     next_event_time = current_time
 
-  # --- 2. Update world state based on events that just finished ---
-  new_prep = list(prep)
-  new_w_loc = w_loc
-  new_w_inv = w_inv
-  new_delivered = list(delivered)
+  # 2. Update world state based on events that just finished -------------------
+  new_prep = list(prepared)
+  new_w_loc = location
+  new_w_inv = inventory
+  # new_delivered = list(delivered)
 
-  # Barista finishes making a drink
-  if b_status[0] == "making" and b_status[2] == next_event_time:
-    new_prep.append(b_status[1])
+  if b_status[2] == next_event_time:
+    # 2.1 Barista finishes making a drink
+    if b_status[0] == "making":
+      new_prep.append(b_status[1])
 
-  # Waiter finishes moving
-  if w_status[0] == "moving" and w_status[2] == next_event_time:
-    new_w_loc = w_status[1]
+  if w_status[2] == next_event_time:
+    # 2.2 Waiter finishes moving
+    if w_status[0] == "moving":
+      new_w_loc = w_status[1]
 
-  # Waiter finishes picking up a drink
-  if w_status[0] == "picking_up" and w_status[2] == next_event_time:
-    new_w_inv = w_status[1]
+    # 2.3 Waiter finishes picking up a drink
+    elif w_status[0] == "picking_up":
+      new_w_inv = w_status[1]
 
-  # Waiter finishes delivering a drink
-  if w_status[0] == "delivering" and w_status[2] == next_event_time:
-    new_delivered.append(w_status[1])
-    new_w_inv = None
+    # 2.4 Waiter finishes delivering a drink
+    # elif w_status[0] == "delivering":
+    #   new_delivered.append(w_status[1])
+    #   new_w_inv = None
 
-  # --- 3. Generate new possible tasks for newly free robots ---
-  successors = []
+  # 3. Generate new possible tasks for newly free robots -----------------------
   barista_is_free = b_status[2] <= next_event_time
   waiter_is_free = w_status[2] <= next_event_time
 
@@ -87,13 +104,17 @@ def get_next_states(state):
   )
 
   # --- 4. Create successor states for each combination of actions ---
+  successors = []
+
   for b_task in possible_b_tasks:
     temp_orders = list(orders)
+
     if barista_is_free and b_task[0] == "making":
       temp_orders.remove(b_task[1])
 
     for w_task in possible_w_tasks:
       temp_prep = list(new_prep)
+
       if waiter_is_free and w_task[0] == "picking_up":
         temp_prep.remove(w_task[1])
 
@@ -102,6 +123,7 @@ def get_next_states(state):
         f"B:{b_task[0]}({b_task[1] or ''}) "
         f"W:{w_task[0]}({w_task[1] or ''}) @ {new_w_loc}"
       )
+
       new_state = (
         next_event_time,
         new_w_loc,
@@ -112,6 +134,7 @@ def get_next_states(state):
         b_task,
         w_task,
       )
+
       successors.append((new_state, action_desc))
 
   return successors
@@ -136,7 +159,7 @@ def get_waiter_actions(current_time, location, inventory, prepared):
   # Move
   for dest in ["bar", "table1", "table2"]:
     if location != dest:
-      actions.append(("moving", dest, current_time + get_travel_time(location, dest)))
+      actions.append(("moving", dest, current_time + get_distance(location, dest)))
 
   # Pick up drink
   if location == "bar" and inventory is None:
@@ -154,54 +177,73 @@ def get_waiter_actions(current_time, location, inventory, prepared):
   return actions
 
 
-def ucs_search(initial_state, all_orders):
+def goal(state):
+  time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
+
+  return (
+    not tray
+    and len(orders) == 0
+    and len(prepared) == 0
+    and len(inventory) == 0
+    and len(tables_to_clean) == 0
+    and b_status[0] == "idle"
+    and w_status[0] == "idle"
+  )
+
+
+def UCS(initial_state):
   """Finds the fastest plan using Uniform-Cost Search (UCS)."""
   counter = itertools.count()  # tie-breaker
+
   frontier = [(0.0, next(counter), initial_state, [])]
   visited = {canonical_state(initial_state)}
 
   while frontier:
-    total_time, _, current_state, path = heapq.heappop(frontier)
+    total_time, _, state, path = heapq.heappop(frontier)
 
-    time, w_loc, w_inv, orders, prep, delivered, b_status, w_status = current_state
+    if goal(state):
+      return total_time, visited, path
 
-    # --- Goal condition ---
-    if set(delivered) == set(all_orders) and not w_inv:
-      return path, total_time
-
-    for next_state, action_desc in get_next_states(current_state):
+    for next_state, next_path in get_next_states(state):
       canon_next_state = canonical_state(next_state)
+
       if canon_next_state not in visited:
         visited.add(canon_next_state)
         next_time = next_state[0]
-        heapq.heappush(frontier, (next_time, next(counter), next_state, path + [action_desc]))
+        heapq.heappush(frontier, (next_time, next(counter), next_state, path + [next_path]))
 
-  return None, float("inf")
+  return float("inf"), None, None
 
 
-# --- Main execution ---
-if __name__ == "__main__":
-  # State: (time, w_loc, w_inv, orders, prepared, delivered, b_status, w_status)
-  initial_orders = (("table1", "hot"), ("table2", "cold"), ("table1", "hot"))
+def main():
   initial_state = (
-    0.0,  # time
-    "bar",  # waiter location
-    None,  # waiter inventory
-    initial_orders,  # orders
-    (),  # prepared drinks
-    (),  # delivered drinks
-    ("idle", None, 0.0),  # barista status
-    ("idle", None, 0.0),  # waiter status
+    0.0,  # Global time
+    ("idle", None, 0.0),  # Barista status: ("idle"|"action", ..., remaining_time)
+    ("idle", None, 0.0),  # Waiter status: ("idle"|"action", ..., remaining_time)
+    "bar",  # Waiter location: "bar", "table1", "table2", "table3", "table4"
+    False,  # Waiter tray: False, True
+    (),  # Waiter inventory: (("tableX", "cold"|"hot"), ...)
+    (
+      ("table1", "cold"),
+      ("table1", "hot"),
+      ("table1", "hot"),
+    ),  # Orders: (("tableX", "cold"|"hot"), ...)
+    (),  # Prepared drinks: (("tableX", "cold"|"hot"), ...)
+    (),  # Tables to clean: ("tableX", ...)
   )
 
-  print(f"Starting with orders: {initial_orders}\n")
+  time_start = perf_counter()
+  total_time, visited, path = UCS(initial_state)
+  time_end = perf_counter()
 
-  plan, total_time = ucs_search(initial_state, initial_orders)
+  print(f"Time: {time_end - time_start:.4f} seconds")
+  print(f"Number of nodes: {len(visited)}")
+  print(f"Total time: {total_time}")
 
-  if plan:
-    print("Fastest plan found:")
-    for step in plan:
-      print(f"  - {step}")
-    print(f"\nTotal time: {total_time:.1f} seconds.")
-  else:
-    print("Could not find a plan.")
+  print("Steps:")
+  for step in path:
+    print(f" - {step}")
+
+
+if __name__ == "__main__":
+  main()

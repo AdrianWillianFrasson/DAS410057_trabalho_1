@@ -156,8 +156,8 @@ def main():
 
   time_start = time.perf_counter()
   # cost, visited, actions = A_star(initial_state, goal, state_actions)
-  # cost, visited, actions = UCS(initial_state, goal, state_actions)
-  cost, visited, actions = BFS(initial_state, goal, state_actions)
+  cost, visited, actions = UCS(initial_state, goal, state_actions)
+  # cost, visited, actions = BFS(initial_state, goal, state_actions)
   time_end = time.perf_counter()
 
   print(f"Time: {time_end - time_start:.4f} seconds")
