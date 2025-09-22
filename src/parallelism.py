@@ -2,11 +2,15 @@ import heapq
 import itertools
 from time import perf_counter
 
-# Action Durations
+# Actions duration [seconds]
 TIME_TO_MAKE_COLD = 3.0
 TIME_TO_MAKE_HOT = 5.0
 TIME_TO_PICKUP = 1.0
 TIME_TO_DELIVER = 1.0
+TIME_TO_TAKE_TRAY = 0.1
+TIME_TO_RETURN_TRAY = 0.1
+SPEED_WITH_TRAY = 1.0
+SPEED_WITHOUT_TRAY = 2.0
 
 # Distances between locations [meters]
 LOCATIONS_DISTANCE = {
@@ -24,6 +28,7 @@ LOCATIONS_DISTANCE = {
 
 
 def get_distance(location1, location2):
+  """Returns the distance between two locations."""
   if location1 == location2:
     return 0
 
@@ -38,12 +43,13 @@ def get_distance(location1, location2):
 
 def canonical_state(state):
   """Converts the state to a consistent, hashable format."""
+
   time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
 
   return (
     time,
-    tuple(sorted(b_status)),
-    tuple(sorted(w_status)),
+    b_status,
+    w_status,
     location,
     tray,
     tuple(sorted(inventory)),
@@ -55,124 +61,158 @@ def canonical_state(state):
 
 def get_next_states(state):
   """Generates all possible successor states from the current state."""
+
   current_time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = (
     state
   )
 
+  b_action, b_action_data, b_finish_time = b_status
+  w_action, w_action_data, w_finish_time = w_status
+
   # 1. Find the time of the next event -----------------------------------------
-  b_finish_time = b_status[2] if b_status[0] != "idle" else float("inf")
-  w_finish_time = w_status[2] if w_status[0] != "idle" else float("inf")
-  next_event_time = min(b_finish_time, w_finish_time)
+  next_event_time = min(
+    b_finish_time if b_action != "idle" else float("inf"),
+    w_finish_time if w_action != "idle" else float("inf"),
+  )
 
   if next_event_time == float("inf"):
     next_event_time = current_time
 
   # 2. Update world state based on events that just finished -------------------
-  new_prep = list(prepared)
-  new_w_loc = location
-  new_w_inv = inventory
-  # new_delivered = list(delivered)
+  new_tray = tray
+  new_location = location
+  new_orders = list(orders)
+  new_prepared = list(prepared)
+  new_inventory = list(inventory)
 
-  if b_status[2] == next_event_time:
-    # 2.1 Barista finishes making a drink
-    if b_status[0] == "making":
-      new_prep.append(b_status[1])
+  if b_finish_time == next_event_time:
+    # Barista finishes making a drink
+    if b_action == "making":
+      new_orders.remove(b_action_data)
+      new_prepared.append(b_action_data)
 
-  if w_status[2] == next_event_time:
-    # 2.2 Waiter finishes moving
-    if w_status[0] == "moving":
-      new_w_loc = w_status[1]
+  if w_finish_time == next_event_time:
+    # Waiter finishes moving
+    if w_action == "moving":
+      new_location = w_action_data
 
-    # 2.3 Waiter finishes picking up a drink
-    elif w_status[0] == "picking_up":
-      new_w_inv = w_status[1]
+    # Waiter finishes taking the tray
+    elif w_action == "take_tray" or w_action == "return_tray":
+      new_tray = w_action_data
 
-    # 2.4 Waiter finishes delivering a drink
-    # elif w_status[0] == "delivering":
-    #   new_delivered.append(w_status[1])
-    #   new_w_inv = None
+    # Waiter finishes picking up a drink
+    elif w_action == "picking_up":
+      new_prepared.remove(w_action_data)
+      new_inventory.append(w_action_data)
 
   # 3. Generate new possible tasks for newly free robots -----------------------
-  barista_is_free = b_status[2] <= next_event_time
-  waiter_is_free = w_status[2] <= next_event_time
+  b_is_free = b_action == "idle" or b_finish_time <= next_event_time
+  w_is_free = w_action == "idle" or w_finish_time <= next_event_time
 
-  possible_b_tasks = get_barista_actions(next_event_time, orders) if barista_is_free else [b_status]
-  possible_w_tasks = (
-    get_waiter_actions(next_event_time, new_w_loc, new_w_inv, new_prep)
-    if waiter_is_free
-    else [w_status]
+  new_state = canonical_state(
+    (
+      next_event_time,
+      b_status,
+      w_status,
+      new_location,
+      new_tray,
+      new_inventory,
+      new_orders,
+      new_prepared,
+      tables_to_clean,
+    )
   )
 
-  # --- 4. Create successor states for each combination of actions ---
+  possible_b_tasks = get_barista_actions(new_state) if b_is_free else [b_status]
+  possible_w_tasks = get_waiter_actions(new_state) if w_is_free else [w_status]
+
+  # 4. Create successor states for each combination of actions -----------------
   successors = []
 
-  for b_task in possible_b_tasks:
-    temp_orders = list(orders)
+  for b_task, w_task in itertools.product(possible_b_tasks, possible_w_tasks):
+    temp_orders = list(new_orders)
+    temp_prepared = list(new_prepared)
+    temp_inventory = list(new_inventory)
 
-    if barista_is_free and b_task[0] == "making":
-      temp_orders.remove(b_task[1])
+    if w_is_free and w_task[0] == "delivering":
+      temp_inventory.remove(w_task[1])
 
-    for w_task in possible_w_tasks:
-      temp_prep = list(new_prep)
+    next_state = (
+      next_event_time,
+      b_task,
+      w_task,
+      new_location,
+      new_tray,
+      tuple(temp_inventory),
+      tuple(temp_orders),
+      tuple(temp_prepared),
+      tables_to_clean,
+    )
 
-      if waiter_is_free and w_task[0] == "picking_up":
-        temp_prep.remove(w_task[1])
+    next_path = (
+      f"[Time: {next_event_time}] "
+      f"B:{b_task[0]}({b_task[1]}) "
+      f"W:{w_task[0]}({w_task[1]}) "
+      f"state: {next_state} "
+    )
 
-      action_desc = (
-        f"[Time: {next_event_time:.1f}] "
-        f"B:{b_task[0]}({b_task[1] or ''}) "
-        f"W:{w_task[0]}({w_task[1] or ''}) @ {new_w_loc}"
-      )
-
-      new_state = (
-        next_event_time,
-        new_w_loc,
-        new_w_inv,
-        tuple(temp_orders),
-        tuple(temp_prep),
-        tuple(new_delivered),
-        b_task,
-        w_task,
-      )
-
-      successors.append((new_state, action_desc))
+    successors.append((next_state, next_path))
 
   return successors
 
 
-def get_barista_actions(current_time, orders):
+def get_barista_actions(state):
   """Returns a list of possible actions for an idle barista."""
-  if not orders:
-    return [("idle", None, current_time)]
 
-  tasks = []
-  for drink in orders:  # barista can choose ANY pending order
-    prep_time = TIME_TO_MAKE_COLD if drink[1] == "cold" else TIME_TO_MAKE_HOT
-    tasks.append(("making", drink, current_time + prep_time))
-  return tasks
+  time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
+
+  actions = [("idle", None, time)]
+
+  # Barista can make drinks
+  for drink in orders:
+    drink_table, drink_kind = drink
+    cost = TIME_TO_MAKE_COLD if drink_kind == "cold" else TIME_TO_MAKE_HOT
+    actions.append(("making", drink, time + cost))
+
+  return actions
 
 
-def get_waiter_actions(current_time, location, inventory, prepared):
-  """Returns a list of all possible actions for an idle waiter."""
-  actions = []
+def get_waiter_actions(state):
+  """Returns a list of possible actions for an idle waiter."""
 
-  # Move
-  for dest in ["bar", "table1", "table2"]:
-    if location != dest:
-      actions.append(("moving", dest, current_time + get_distance(location, dest)))
+  time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
 
-  # Pick up drink
-  if location == "bar" and inventory is None:
+  actions = [("idle", None, time)]
+
+  # Waiter can walk to another location
+  for destination in ["bar", "table1", "table2", "table3", "table4"]:
+    if location != destination:
+      speed = SPEED_WITH_TRAY if tray else SPEED_WITHOUT_TRAY
+      dist = get_distance(location, destination)
+      cost = dist / speed
+      actions.append(("moving", destination, time + cost))
+
+  # Waiter can take or return the tray
+  # if not tray and location == "bar" and len(inventory) == 0:
+  #   cost = TIME_TO_TAKE_TRAY
+  #   actions.append(("take_tray", True, time + cost))
+  # if tray and location == "bar" and len(inventory) == 0:
+  #   cost = TIME_TO_RETURN_TRAY
+  #   actions.append(("return_tray", False, time + cost))
+
+  # Waiter can pickup drinks from the bar
+  if location == "bar" and ((not tray and len(inventory) == 0) or (tray and len(inventory) < 3)):
+    cost = TIME_TO_PICKUP
     for drink in prepared:
-      actions.append(("picking_up", drink, current_time + TIME_TO_PICKUP))
+      actions.append(("picking_up", drink, time + cost))
 
-  # Deliver drink
-  if inventory is not None and location == inventory[0]:
-    actions.append(("delivering", inventory, current_time + TIME_TO_DELIVER))
-
-  # Idle only if truly no task
-  if not actions:
-    actions.append(("idle", None, current_time))
+  # Waiter can deliver drinks if he is at the right table
+  if len(inventory) > 0:
+    cost = TIME_TO_DELIVER
+    for drink in inventory:
+      drink_table, drink_kind = drink
+      if drink_table == location:
+        actions.append(("delivering", drink, time + cost))
 
   return actions
 
@@ -193,13 +233,12 @@ def goal(state):
 
 def UCS(initial_state):
   """Finds the fastest plan using Uniform-Cost Search (UCS)."""
-  counter = itertools.count()  # tie-breaker
 
-  frontier = [(0.0, next(counter), initial_state, [])]
+  frontier = [(0.0, canonical_state(initial_state), [])]
   visited = {canonical_state(initial_state)}
 
   while frontier:
-    total_time, _, state, path = heapq.heappop(frontier)
+    total_time, state, path = heapq.heappop(frontier)
 
     if goal(state):
       return total_time, visited, path
@@ -210,7 +249,7 @@ def UCS(initial_state):
       if canon_next_state not in visited:
         visited.add(canon_next_state)
         next_time = next_state[0]
-        heapq.heappush(frontier, (next_time, next(counter), next_state, path + [next_path]))
+        heapq.heappush(frontier, (next_time, next_state, path + [next_path]))
 
   return float("inf"), None, None
 
@@ -218,15 +257,14 @@ def UCS(initial_state):
 def main():
   initial_state = (
     0.0,  # Global time
-    ("idle", None, 0.0),  # Barista status: ("idle"|"action", ..., remaining_time)
-    ("idle", None, 0.0),  # Waiter status: ("idle"|"action", ..., remaining_time)
+    ("idle", None, 0.0),  # Barista status: ("idle"|"action", ..., finish_time)
+    ("idle", None, 0.0),  # Waiter status: ("idle"|"action", ..., finish_time)
     "bar",  # Waiter location: "bar", "table1", "table2", "table3", "table4"
     False,  # Waiter tray: False, True
     (),  # Waiter inventory: (("tableX", "cold"|"hot"), ...)
     (
       ("table1", "cold"),
-      ("table1", "hot"),
-      ("table1", "hot"),
+      ("table2", "hot"),
     ),  # Orders: (("tableX", "cold"|"hot"), ...)
     (),  # Prepared drinks: (("tableX", "cold"|"hot"), ...)
     (),  # Tables to clean: ("tableX", ...)
