@@ -49,9 +49,12 @@ def heuristic_v1(state):
   return h
 
 def heuristic_v2(state):
-    _, _, inventory, orders, prepared, tables_to_clean = state
-    tasks_left = len(inventory) + len(orders) + len(prepared) + len(tables_to_clean)
-    return tasks_left * 2
+    location, _, inventory, orders, prepared, tables_to_clean = state
+    h = len(inventory) + len(orders) + len(prepared) + len(tables_to_clean)
+    if orders or prepared or inventory:
+        if location != "bar":
+            h += 1
+    return h
 
 # Uniform-Cost Search ------------------------------------------------------------------------------
 def UCS(initial_state, goal, state_actions):

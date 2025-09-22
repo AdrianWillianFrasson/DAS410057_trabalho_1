@@ -1,4 +1,5 @@
 import time
+import matplotlib.pyplot as plt
 from search_algorithm import BFS, UCS, A_star, DLS, IDDFS, heuristic_v1, heuristic_v2
 
 def get_problems():
@@ -222,18 +223,24 @@ def run_experiments():
 
             print(f"{name}: time={runtime:.4f}s, nodes={n_nodes}, cost={cost}")
 
-    for metric in ["time", "nodes", "cost"]:
-        plt.figure()
-        for pid in problems:
-            vals = [results[pid][alg][metric] for alg in algorithms]
-            plt.plot(list(algorithms.keys()), vals, marker="o", label=f"Problem {pid}")
-        plt.title(f"{metric.capitalize()} per Algorithm")
-        plt.ylabel(metric.capitalize())
-        plt.xlabel("Algorithm")
-        plt.legend()
-        plt.grid(True)
-        plt.savefig(f"results_{metric}.png")
-        plt.close()
+    for pid in problems:
+        for metric in ["time", "nodes", "cost"]:
+            plt.figure()
+            x = list(algorithms.keys())
+            y = [results[pid][alg][metric] for alg in algorithms]
+
+            y = [val if val != float('inf') else float('nan') for val in y]
+
+            plt.plot(x, y, marker='o', linestyle='-', color='blue')
+            plt.title(f"Problem {pid} - {metric.capitalize()}")
+            plt.ylabel(metric.capitalize())
+            plt.xlabel("Algorithm")
+            plt.grid(True, linestyle="--", alpha=0.7)
+            plt.tight_layout()
+            plt.savefig(f"results_{pid}_{metric}.png")
+            plt.show()
+            plt.close()
+
 
 if __name__ == "__main__":
     run_experiments()
