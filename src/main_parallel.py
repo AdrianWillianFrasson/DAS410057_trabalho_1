@@ -7,8 +7,10 @@ TIME_TO_MAKE_COLD = 3.0
 TIME_TO_MAKE_HOT = 5.0
 TIME_TO_PICKUP = 1.0
 TIME_TO_DELIVER = 1.0
-TIME_TO_TAKE_TRAY = 0.1
-TIME_TO_RETURN_TRAY = 0.1
+TIME_TO_CLEAN_BIG = 4.0
+TIME_TO_CLEAN_SMALL = 2.0
+TIME_TO_TAKE_TRAY = 0.0
+TIME_TO_RETURN_TRAY = 0.0
 SPEED_WITH_TRAY = 1.0
 SPEED_WITHOUT_TRAY = 2.0
 
@@ -29,6 +31,7 @@ LOCATIONS_DISTANCE = {
 
 def get_distance(location1, location2):
   """Returns the distance between two locations."""
+
   if location1 == location2:
     return 0
 
@@ -47,7 +50,6 @@ def canonical_state(state):
   time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
 
   return (
-    time,
     b_status,
     w_status,
     location,
@@ -84,6 +86,7 @@ def get_next_states(state):
   new_orders = list(orders)
   new_prepared = list(prepared)
   new_inventory = list(inventory)
+  new_tables_to_clean = list(tables_to_clean)
 
   if b_finish_time == next_event_time:
     # Barista finishes making a drink
@@ -105,22 +108,28 @@ def get_next_states(state):
       new_prepared.remove(w_action_data)
       new_inventory.append(w_action_data)
 
-  # 3. Generate new possible tasks for newly free robots -----------------------
-  b_is_free = b_action == "idle" or b_finish_time <= next_event_time
-  w_is_free = w_action == "idle" or w_finish_time <= next_event_time
+    # Waiter finishes delivering a drink
+    elif w_action == "delivering":
+      new_inventory.remove(w_action_data)
 
-  new_state = canonical_state(
-    (
-      next_event_time,
-      b_status,
-      w_status,
-      new_location,
-      new_tray,
-      new_inventory,
-      new_orders,
-      new_prepared,
-      tables_to_clean,
-    )
+    # Waiter finishes cleaning a table
+    elif w_action == "cleaning":
+      new_tables_to_clean.remove(w_action_data)
+
+  # 3. Generate new possible tasks for newly free robots -----------------------
+  b_is_free = b_finish_time <= next_event_time
+  w_is_free = w_finish_time <= next_event_time
+
+  new_state = (
+    next_event_time,
+    b_status,
+    w_status,
+    new_location,
+    new_tray,
+    tuple(new_inventory),
+    tuple(new_orders),
+    tuple(new_prepared),
+    tuple(new_tables_to_clean),
   )
 
   possible_b_tasks = get_barista_actions(new_state) if b_is_free else [b_status]
@@ -130,31 +139,19 @@ def get_next_states(state):
   successors = []
 
   for b_task, w_task in itertools.product(possible_b_tasks, possible_w_tasks):
-    temp_orders = list(new_orders)
-    temp_prepared = list(new_prepared)
-    temp_inventory = list(new_inventory)
-
-    if w_is_free and w_task[0] == "delivering":
-      temp_inventory.remove(w_task[1])
-
     next_state = (
       next_event_time,
       b_task,
       w_task,
       new_location,
       new_tray,
-      tuple(temp_inventory),
-      tuple(temp_orders),
-      tuple(temp_prepared),
-      tables_to_clean,
+      tuple(new_inventory),
+      tuple(new_orders),
+      tuple(new_prepared),
+      tuple(new_tables_to_clean),
     )
 
-    next_path = (
-      f"[Time: {next_event_time}] "
-      f"B:{b_task[0]}({b_task[1]}) "
-      f"W:{w_task[0]}({w_task[1]}) "
-      f"state: {next_state} "
-    )
+    next_path = f"{next_event_time:^8} | {f'{b_task[0]}, {b_task[1]}, {b_task[2]}':<35} | {f'{w_task[0]}, {w_task[1]}, {w_task[2]}':<35}"
 
     successors.append((next_state, next_path))
 
@@ -166,13 +163,17 @@ def get_barista_actions(state):
 
   time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
 
-  actions = [("idle", None, time)]
+  actions = []
 
   # Barista can make drinks
   for drink in orders:
     drink_table, drink_kind = drink
     cost = TIME_TO_MAKE_COLD if drink_kind == "cold" else TIME_TO_MAKE_HOT
     actions.append(("making", drink, time + cost))
+
+  # Barista can idle if there is nothing else to do
+  if len(orders) == 0:
+    actions.append(("idle", None, time))
 
   return actions
 
@@ -182,23 +183,15 @@ def get_waiter_actions(state):
 
   time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
 
-  actions = [("idle", None, time)]
-
-  # Waiter can walk to another location
-  for destination in ["bar", "table1", "table2", "table3", "table4"]:
-    if location != destination:
-      speed = SPEED_WITH_TRAY if tray else SPEED_WITHOUT_TRAY
-      dist = get_distance(location, destination)
-      cost = dist / speed
-      actions.append(("moving", destination, time + cost))
+  actions = []
 
   # Waiter can take or return the tray
-  # if not tray and location == "bar" and len(inventory) == 0:
-  #   cost = TIME_TO_TAKE_TRAY
-  #   actions.append(("take_tray", True, time + cost))
-  # if tray and location == "bar" and len(inventory) == 0:
-  #   cost = TIME_TO_RETURN_TRAY
-  #   actions.append(("return_tray", False, time + cost))
+  if not tray and location == "bar" and len(inventory) == 0:
+    cost = TIME_TO_TAKE_TRAY
+    actions.append(("take_tray", True, time + cost))
+  if tray and location == "bar" and len(inventory) == 0:
+    cost = TIME_TO_RETURN_TRAY
+    actions.append(("return_tray", False, time + cost))
 
   # Waiter can pickup drinks from the bar
   if location == "bar" and ((not tray and len(inventory) == 0) or (tray and len(inventory) < 3)):
@@ -213,6 +206,29 @@ def get_waiter_actions(state):
       drink_table, drink_kind = drink
       if drink_table == location:
         actions.append(("delivering", drink, time + cost))
+
+  # Waiter can clean dirty tables
+  if location in tables_to_clean and not tray and len(inventory) == 0:
+    cost = TIME_TO_CLEAN_BIG if location == "table3" else TIME_TO_CLEAN_SMALL
+    actions.append(("cleaning", location, time + cost))
+
+  # Waiter can walk to another location
+  relevant = set(["bar"])
+  for drink in inventory:
+    relevant.add(drink[0])
+  for table in tables_to_clean:
+    relevant.add(table)
+
+  for destination in ["bar", "table1", "table2", "table3", "table4"]:
+    if destination != location and destination in relevant:
+      speed = SPEED_WITH_TRAY if tray else SPEED_WITHOUT_TRAY
+      dist = get_distance(location, destination)
+      cost = dist / speed
+      actions.append(("moving", destination, time + cost))
+
+  # Waiter can idle if there is nothing else to do
+  if not tray and len(prepared) == 0 and len(inventory) == 0 and len(tables_to_clean) == 0:
+    actions.append(("idle", None, time))
 
   return actions
 
@@ -234,8 +250,8 @@ def goal(state):
 def UCS(initial_state):
   """Finds the fastest plan using Uniform-Cost Search (UCS)."""
 
-  frontier = [(0.0, canonical_state(initial_state), [])]
-  visited = {canonical_state(initial_state)}
+  frontier = [(0.0, initial_state, [])]
+  visited = {canonical_state(initial_state): initial_state[0]}
 
   while frontier:
     total_time, state, path = heapq.heappop(frontier)
@@ -245,10 +261,10 @@ def UCS(initial_state):
 
     for next_state, next_path in get_next_states(state):
       canon_next_state = canonical_state(next_state)
+      next_time = next_state[0]
 
-      if canon_next_state not in visited:
-        visited.add(canon_next_state)
-        next_time = next_state[0]
+      if canon_next_state not in visited or visited[canon_next_state] > next_time:
+        visited[canon_next_state] = next_time
         heapq.heappush(frontier, (next_time, next_state, path + [next_path]))
 
   return float("inf"), None, None
@@ -264,23 +280,28 @@ def main():
     (),  # Waiter inventory: (("tableX", "cold"|"hot"), ...)
     (
       ("table1", "cold"),
-      ("table2", "hot"),
+      ("table1", "hot"),
+      ("table1", "cold"),
     ),  # Orders: (("tableX", "cold"|"hot"), ...)
     (),  # Prepared drinks: (("tableX", "cold"|"hot"), ...)
-    (),  # Tables to clean: ("tableX", ...)
+    ("table3", "table4"),  # Tables to clean: ("tableX", ...)
   )
 
   time_start = perf_counter()
   total_time, visited, path = UCS(initial_state)
   time_end = perf_counter()
 
-  print(f"Time: {time_end - time_start:.4f} seconds")
+  print(f"Execution time: {time_end - time_start:.4f} [s]")
   print(f"Number of nodes: {len(visited)}")
-  print(f"Total time: {total_time}")
+  print(f"Path total time: {total_time} [s]")
 
   print("Steps:")
+  print(
+    f"{'Time [s]':^8} | {'Barista (act., desc., end time)':<35} | Waiter (act., desc., end time)"
+  )
+  print("-" * 80)
   for step in path:
-    print(f" - {step}")
+    print(step)
 
 
 if __name__ == "__main__":
