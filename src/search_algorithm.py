@@ -115,7 +115,7 @@ def DLS(state, goal, state_actions, limit, actions=None, cost=0, visited=None):
         return cost, visited, actions
 
     if limit == 0:
-        return None  
+        return None  # não pode expandir mais
 
     visited.add(state)
 
@@ -135,10 +135,11 @@ def DLS(state, goal, state_actions, limit, actions=None, cost=0, visited=None):
     return None
 
 
-def IDDFS(initial_state, goal, state_actions, max_depth=50):
-    visited = set()
+# Iterative Deepening Depth-First Search (IDDFS)
+def IDDFS(initial_state, goal, state_actions, max_depth=200):
     for depth in range(1, max_depth + 1):
-        result = DLS(initial_state, goal, state_actions, depth, visited=visited)
+        result = DLS(initial_state, goal, state_actions, depth, visited=set())
         if result is not None:
             return result
-    return float("inf"), visited, []
+    # se não encontrou solução até max_depth
+    return float("inf"), set(), []
