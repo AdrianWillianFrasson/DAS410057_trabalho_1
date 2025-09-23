@@ -1,32 +1,20 @@
-import heapq
 import itertools
 from time import perf_counter
 
-# Actions duration [seconds]
-TIME_TO_MAKE_COLD = 3.0
-TIME_TO_MAKE_HOT = 5.0
-TIME_TO_PICKUP = 1.0
-TIME_TO_DELIVER = 1.0
-TIME_TO_CLEAN_BIG = 4.0
-TIME_TO_CLEAN_SMALL = 2.0
-TIME_TO_TAKE_TRAY = 0.0
-TIME_TO_RETURN_TRAY = 0.0
-SPEED_WITH_TRAY = 1.0
-SPEED_WITHOUT_TRAY = 2.0
-
-# Distances between locations [meters]
-LOCATIONS_DISTANCE = {
-  ("bar", "table1"): 2,
-  ("bar", "table2"): 2,
-  ("bar", "table3"): 3,
-  ("bar", "table4"): 3,
-  ("table1", "table2"): 1,
-  ("table1", "table3"): 1,
-  ("table1", "table4"): 1,
-  ("table2", "table3"): 1,
-  ("table2", "table4"): 1,
-  ("table3", "table4"): 1,
-}
+from constants import (
+  LOCATIONS_DISTANCE,
+  SPEED_WITH_TRAY,
+  SPEED_WITHOUT_TRAY,
+  TIME_TO_CLEAN_BIG,
+  TIME_TO_CLEAN_SMALL,
+  TIME_TO_DELIVER,
+  TIME_TO_MAKE_COLD,
+  TIME_TO_MAKE_HOT,
+  TIME_TO_PICKUP,
+  TIME_TO_RETURN_TRAY,
+  TIME_TO_TAKE_TRAY,
+)
+from search_algorithm import BFS, UCS, A_star
 
 
 def get_distance(location1, location2):
@@ -42,23 +30,6 @@ def get_distance(location1, location2):
     return LOCATIONS_DISTANCE[(location2, location1)]
 
   raise ValueError(f"No distance defined between {location1} and {location2}")
-
-
-def canonical_state(state):
-  """Converts the state to a consistent, hashable format."""
-
-  time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
-
-  return (
-    b_status,
-    w_status,
-    location,
-    tray,
-    tuple(sorted(inventory)),
-    tuple(sorted(orders)),
-    tuple(sorted(prepared)),
-    tuple(sorted(tables_to_clean)),
-  )
 
 
 def get_next_states(state):
@@ -247,29 +218,6 @@ def goal(state):
   )
 
 
-def UCS(initial_state):
-  """Finds the fastest plan using Uniform-Cost Search (UCS)."""
-
-  frontier = [(0.0, initial_state, [])]
-  visited = {canonical_state(initial_state): initial_state[0]}
-
-  while frontier:
-    total_time, state, path = heapq.heappop(frontier)
-
-    if goal(state):
-      return total_time, visited, path
-
-    for next_state, next_path in get_next_states(state):
-      canon_next_state = canonical_state(next_state)
-      next_time = next_state[0]
-
-      if canon_next_state not in visited or visited[canon_next_state] > next_time:
-        visited[canon_next_state] = next_time
-        heapq.heappush(frontier, (next_time, next_state, path + [next_path]))
-
-  return float("inf"), None, None
-
-
 def main():
   initial_state = (
     0.0,  # Global time
@@ -288,7 +236,9 @@ def main():
   )
 
   time_start = perf_counter()
-  total_time, visited, path = UCS(initial_state)
+  total_time, visited, path = A_star(initial_state, goal, get_next_states)
+  # total_time, visited, path = UCS(initial_state, goal, get_next_states)
+  # total_time, visited, path = BFS(initial_state, goal, get_next_states)
   time_end = perf_counter()
 
   print(f"Execution time: {time_end - time_start:.4f} [s]")

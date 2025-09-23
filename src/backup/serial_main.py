@@ -1,5 +1,5 @@
 import time
-from search_algorithm import BFS, UCS, A_star
+from serial_search_algorithm import BFS, UCS, A_star
 
 
 def canonical_state(state):

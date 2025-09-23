@@ -1,98 +1,126 @@
 import heapq
 from collections import deque
 
+from constants import (
+  TIME_TO_CLEAN_BIG,
+  TIME_TO_CLEAN_SMALL,
+  TIME_TO_DELIVER,
+  TIME_TO_MAKE_COLD,
+  TIME_TO_MAKE_HOT,
+)
+
+
+def canonical_state(state):
+  """Converts the state to a consistent, hashable format."""
+
+  time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
+
+  return (
+    b_status,
+    w_status,
+    location,
+    tray,
+    tuple(sorted(inventory)),
+    tuple(sorted(orders)),
+    tuple(sorted(prepared)),
+    tuple(sorted(tables_to_clean)),
+  )
+
 
 # A* Search ----------------------------------------------------------------------------------------
-def A_star(initial_state, goal, state_actions):
-  frontier = []
-  # (f = h + total_cost, total_cost, state, actions_steps)
-  heapq.heappush(frontier, (heuristic(initial_state), 0, initial_state, []))
+def A_star(initial_state, goal, get_next_states):
+  """Finds the fastest plan using A* search."""
 
-  visited = {}
+  # Priority queue: (f = g + h, g = elapsed_time, state, path)
+  frontier = [(heuristic(initial_state), 0.0, initial_state, [])]
+  visited = {canonical_state(initial_state): 0.0}
 
   while frontier:
-    f, total_cost, state, actions = heapq.heappop(frontier)
+    f, g, state, path = heapq.heappop(frontier)
 
     if goal(state):
-      return total_cost, visited, actions
+      return g, visited, path
 
-    if state in visited and visited[state] <= total_cost:
-      continue
+    for next_state, next_path in get_next_states(state):
+      canon_next_state = canonical_state(next_state)
+      next_time = next_state[0]
 
-    visited[state] = total_cost
+      if canon_next_state not in visited or visited[canon_next_state] > next_time:
+        visited[canon_next_state] = next_time
+        h = heuristic(next_state)
+        heapq.heappush(frontier, (next_time + h, next_time, next_state, path + [next_path]))
 
-    for new_cost, new_state, new_action in state_actions(state):
-      new_total_cost = total_cost + new_cost
-      new_f = heuristic(new_state) + new_total_cost
-
-      heapq.heappush(frontier, (new_f, new_total_cost, new_state, actions + [new_action]))
-
-  return None
+  return float("inf"), None, None
 
 
 def heuristic(state):
-  location, tray, inventory, orders, prepared, tables_to_clean = state
-  h = 0
+  """Estimates the remaining time to reach the goal from the current state."""
 
-  # 1. Estimate prep time for pending orders
-  for _, kind in orders:
-    h += 3 if kind == "cold" else 5
+  time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
 
-  # 2. Each dirty table cleaning cost
-  for table in tables_to_clean:
-    h += 4 if table == "table3" else 2
+  h = 0.0
 
-  # 3. If drinks left to deliver or prepare, assume we must move at least once
-  if (orders or prepared or inventory) and location != "bar":
-    h += 1
+  # Drinks to make
+  if orders:
+    h += len(orders) * min(TIME_TO_MAKE_COLD, TIME_TO_MAKE_HOT)
+
+  # Drinks to deliver (either already prepared or in inventory)
+  total_drinks = len(prepared) + len(inventory)
+  if total_drinks > 0:
+    h += total_drinks * TIME_TO_DELIVER
+
+  # Tables to clean
+  if tables_to_clean:
+    # optimistic: assume all small tables
+    h += len(tables_to_clean) * min(TIME_TO_CLEAN_BIG, TIME_TO_CLEAN_SMALL)
 
   return h
 
 
 # Uniform-Cost Search ------------------------------------------------------------------------------
-def UCS(initial_state, goal, state_actions):
-  frontier = []
-  heapq.heappush(frontier, (0, initial_state, []))  # (total_cost, state, actions_steps)
+def UCS(initial_state, goal, get_next_states):
+  """Finds the fastest plan using Uniform-Cost Search (UCS)."""
 
-  visited = {}
+  frontier = [(0.0, initial_state, [])]
+  visited = {canonical_state(initial_state): 0.0}
 
   while frontier:
-    total_cost, state, actions = heapq.heappop(frontier)
+    total_time, state, path = heapq.heappop(frontier)
 
     if goal(state):
-      return total_cost, visited, actions
+      return total_time, visited, path
 
-    # If we've already seen this state with a lower cost, skip
-    if state in visited and visited[state] <= total_cost:
-      continue
+    for next_state, next_path in get_next_states(state):
+      canon_next_state = canonical_state(next_state)
+      next_time = next_state[0]
 
-    visited[state] = total_cost
+      if canon_next_state not in visited or visited[canon_next_state] > next_time:
+        visited[canon_next_state] = next_time
+        heapq.heappush(frontier, (next_time, next_state, path + [next_path]))
 
-    for new_cost, new_state, new_action in state_actions(state):
-      heapq.heappush(frontier, (total_cost + new_cost, new_state, actions + [new_action]))
-
-  return None
+  return float("inf"), None, None
 
 
 # Breadth-First Search -----------------------------------------------------------------------------
-def BFS(initial_state, goal, state_actions):
-  queue = deque()
-  queue.append((0, initial_state, []))  # (total_cost, state, actions_steps)
+def BFS(initial_state, goal, get_next_states):
+  """Finds the fewest action steps using Breadth-First Search (BFS)."""
 
-  visited = set()  # Visited nodes
+  frontier = deque()
+  frontier.append((initial_state, []))
 
-  while queue:
-    total_cost, state, actions = queue.popleft()
+  visited = {canonical_state(initial_state)}
+
+  while frontier:
+    state, path = frontier.popleft()
 
     if goal(state):
-      return total_cost, visited, actions
+      return state[0], visited, path
 
-    if state in visited:
-      continue
+    for next_state, next_path in get_next_states(state):
+      canon_next_state = canonical_state(next_state)
 
-    visited.add(state)
+      if canon_next_state not in visited:
+        visited.add(canon_next_state)
+        frontier.append((next_state, path + [next_path]))
 
-    for new_cost, new_state, new_action in state_actions(state):
-      queue.append((total_cost + new_cost, new_state, actions + [new_action]))
-
-  return None
+  return float("inf"), None, None
