@@ -6,7 +6,7 @@ from collections import deque
 def A_star(initial_state, goal, state_actions):
   frontier = []
   # (f = h + total_cost, total_cost, state, actions_steps)
-  heapq.heappush(frontier, (heuristic(initial_state), 0, initial_state, []))
+  heapq.heappush(frontier, (heuristic(initial_state), 0.0, initial_state, []))
 
   visited = {}
 
@@ -21,7 +21,7 @@ def A_star(initial_state, goal, state_actions):
 
     visited[state] = total_cost
 
-    for new_cost, new_state, new_action in state_actions(state):
+    for new_cost, new_state, new_action in state_actions(state, total_cost):
       new_total_cost = total_cost + new_cost
       new_f = heuristic(new_state) + new_total_cost
 
@@ -49,10 +49,20 @@ def heuristic(state):
   return h
 
 
+def heuristic2(state):
+  location, _, inventory, orders, prepared, tables_to_clean = state
+  h = len(inventory) + len(orders) + len(prepared) + len(tables_to_clean)
+
+  if (orders or prepared or inventory) and location != "bar":
+    h += 1
+
+  return h
+
+
 # Uniform-Cost Search ------------------------------------------------------------------------------
 def UCS(initial_state, goal, state_actions):
   frontier = []
-  heapq.heappush(frontier, (0, initial_state, []))  # (total_cost, state, actions_steps)
+  heapq.heappush(frontier, (0.0, initial_state, []))  # (total_cost, state, actions_steps)
 
   visited = {}
 
@@ -68,7 +78,7 @@ def UCS(initial_state, goal, state_actions):
 
     visited[state] = total_cost
 
-    for new_cost, new_state, new_action in state_actions(state):
+    for new_cost, new_state, new_action in state_actions(state, total_cost):
       heapq.heappush(frontier, (total_cost + new_cost, new_state, actions + [new_action]))
 
   return None
@@ -77,7 +87,7 @@ def UCS(initial_state, goal, state_actions):
 # Breadth-First Search -----------------------------------------------------------------------------
 def BFS(initial_state, goal, state_actions):
   queue = deque()
-  queue.append((0, initial_state, []))  # (total_cost, state, actions_steps)
+  queue.append((0.0, initial_state, []))  # (total_cost, state, actions_steps)
 
   visited = set()  # Visited nodes
 
@@ -92,7 +102,7 @@ def BFS(initial_state, goal, state_actions):
 
     visited.add(state)
 
-    for new_cost, new_state, new_action in state_actions(state):
+    for new_cost, new_state, new_action in state_actions(state, total_cost):
       queue.append((total_cost + new_cost, new_state, actions + [new_action]))
 
   return None

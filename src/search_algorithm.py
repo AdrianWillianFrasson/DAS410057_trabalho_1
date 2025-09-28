@@ -60,6 +60,40 @@ def heuristic(state):
 
   h = 0.0
 
+  # 1. Estimate prep time for pending orders
+  for _, kind in orders:
+    h += 3 if kind == "cold" else 5
+
+  # 2. Each dirty table cleaning cost
+  for table in tables_to_clean:
+    h += 4 if table == "table3" else 2
+
+  # 3. If drinks left to deliver or prepare, assume we must move at least once
+  if (orders or prepared or inventory) and location != "bar":
+    h += 1
+
+  return h
+
+
+def heuristic2(state):
+  """Estimates the remaining time to reach the goal from the current state."""
+  time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
+
+  h = len(inventory) + len(orders) + len(prepared) + len(tables_to_clean)
+
+  if (orders or prepared or inventory) and location != "bar":
+    h += 1
+
+  return h
+
+
+def heuristic3(state):
+  """Estimates the remaining time to reach the goal from the current state."""
+
+  time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
+
+  h = 0.0
+
   # Drinks to make
   if orders:
     h += len(orders) * min(TIME_TO_MAKE_COLD, TIME_TO_MAKE_HOT)

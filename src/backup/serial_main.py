@@ -1,4 +1,4 @@
-import time
+from time import perf_counter
 from serial_search_algorithm import BFS, UCS, A_star
 
 
@@ -13,6 +13,10 @@ def canonical_state(state):
     tuple(sorted(prepared)),
     tuple(sorted(tables_to_clean)),
   )
+
+
+def get_desc(time, action, data, cost):
+  return f"{time:^8} | {f'{action}, {data}, {time + cost}':<35}"
 
 
 # Distances between locations [meters]
@@ -55,7 +59,7 @@ def goal(state):
   )
 
 
-def state_actions(state):
+def state_actions(state, time):
   location, tray, inventory, orders, prepared, tables_to_clean = state
   result = []
 
@@ -68,7 +72,7 @@ def state_actions(state):
     new_state = canonical_state(
       (location, tray, inventory, new_orders, new_prepared, tables_to_clean)
     )
-    result.append((cost, new_state, f"[{cost}] prepare drink: {drink}"))
+    result.append((cost, new_state, get_desc(time, "Barista: making", drink, cost)))
 
   # 2. Waiter can walk to another location
   possible_locations = ["bar", "table1", "table2", "table3", "table4"]
@@ -80,17 +84,17 @@ def state_actions(state):
       new_state = canonical_state(
         (new_location, tray, inventory, orders, prepared, tables_to_clean)
       )
-      result.append((cost, new_state, f"[{cost}] go: {new_location}"))
+      result.append((cost, new_state, get_desc(time, "Waiter: moving", new_location, cost)))
 
   # 3. Waiter can take or return the tray
   if not tray and location == "bar" and len(inventory) == 0:
     cost = 0.0
     new_state = canonical_state((location, True, inventory, orders, prepared, tables_to_clean))
-    result.append((cost, new_state, f"[{cost}] take tray"))
+    result.append((cost, new_state, get_desc(time, "Waiter: take_tray", True, cost)))
   if tray and location == "bar" and len(inventory) == 0:
     cost = 0.0
     new_state = canonical_state((location, False, inventory, orders, prepared, tables_to_clean))
-    result.append((cost, new_state, f"[{cost}] return tray"))
+    result.append((cost, new_state, get_desc(time, "Waiter: return_tray", False, cost)))
 
   # 4. Waiter can pickup drinks from the bar without a tray
   if location == "bar" and not tray and len(inventory) == 0:
@@ -101,7 +105,7 @@ def state_actions(state):
       new_state = canonical_state(
         (location, tray, new_inventory, orders, new_prepared, tables_to_clean)
       )
-      result.append((cost, new_state, f"[{cost}] pickup drink: {drink}"))
+      result.append((cost, new_state, get_desc(time, "Waiter: picking_up", drink, cost)))
 
   # 5. Waiter can pickup drinks from the bar with a tray
   if location == "bar" and tray and len(inventory) < 3:
@@ -112,9 +116,7 @@ def state_actions(state):
       new_state = canonical_state(
         (location, tray, new_inventory, orders, new_prepared, tables_to_clean)
       )
-      result.append(
-        (cost, new_state, f"[{cost}] pickup drink (tray - {len(new_inventory)}): {drink}")
-      )
+      result.append((cost, new_state, get_desc(time, "Waiter: picking_up", drink, cost)))
 
   # 6. Waiter can deliver drinks if he is at the right table
   if len(inventory) > 0:
@@ -126,14 +128,14 @@ def state_actions(state):
         new_state = canonical_state(
           (location, tray, new_inventory, orders, prepared, tables_to_clean)
         )
-        result.append((cost, new_state, f"[{cost}] deliver drink: {drink}"))
+        result.append((cost, new_state, get_desc(time, "Waiter: delivering", drink, cost)))
 
   # 7. Waiter can clean dirty tables
   if location in tables_to_clean and not tray and len(inventory) == 0:
     cost = 4.0 if location == "table3" else 2.0
     new_tables = tuple(t for t in tables_to_clean if t != location)
     new_state = canonical_state((location, tray, inventory, orders, prepared, new_tables))
-    result.append((cost, new_state, f"[{cost}] clean table: {location}"))
+    result.append((cost, new_state, get_desc(time, "Waiter: cleaning", location, cost)))
 
   return result
 
@@ -145,28 +147,36 @@ def main():
       False,  # Waiter tray: False, True
       (),  # Waiter inventory: (("tableX", "cold"|"hot"), ...)
       (
+        ("table4", "cold"),
+        ("table4", "cold"),
         ("table1", "cold"),
-        ("table1", "hot"),
-        ("table1", "hot"),
+        ("table1", "cold"),
+        ("table3", "hot"),
+        ("table3", "hot"),
+        ("table3", "hot"),
+        ("table3", "hot"),
       ),  # Orders: (("tableX", "cold"|"hot"), ...)
       (),  # Prepared drinks: (("tableX", "cold"|"hot"), ...)
-      ("table3", "table4"),  # Tables to clean: ("tableX", ...)
+      ("table2",),  # Tables to clean: ("tableX", ...)
     )
   )
 
-  time_start = time.perf_counter()
-  # cost, visited, actions = A_star(initial_state, goal, state_actions)
-  cost, visited, actions = UCS(initial_state, goal, state_actions)
+  time_start = perf_counter()
+  cost, visited, actions = A_star(initial_state, goal, state_actions)
+  # cost, visited, actions = UCS(initial_state, goal, state_actions)
   # cost, visited, actions = BFS(initial_state, goal, state_actions)
-  time_end = time.perf_counter()
+  time_end = perf_counter()
 
-  print(f"Time: {time_end - time_start:.4f} seconds")
+  print(f"Execution time: {time_end - time_start:.4f} [s]")
   print(f"Number of nodes: {len(visited)}")
-  print(f"Total cost: {cost}")
+  print(f"Path total time: {cost} [s]")
 
   print("Steps:")
+  print(f"{'Time [s]':^8} | {'Robots Actions (act., desc., end time)':<30}")
+  print("-" * 60)
   for step in actions:
-    print(f" - {step}")
+    print(step)
+  print(get_desc(cost, "idle", None, 0.0))
 
 
 if __name__ == "__main__":

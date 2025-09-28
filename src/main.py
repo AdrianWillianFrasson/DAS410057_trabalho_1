@@ -35,9 +35,7 @@ def get_distance(location1, location2):
 def get_next_states(state):
   """Generates all possible successor states from the current state."""
 
-  current_time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = (
-    state
-  )
+  time, b_status, w_status, location, tray, inventory, orders, prepared, tables_to_clean = state
 
   b_action, b_action_data, b_finish_time = b_status
   w_action, w_action_data, w_finish_time = w_status
@@ -49,7 +47,7 @@ def get_next_states(state):
   )
 
   if next_event_time == float("inf"):
-    next_event_time = current_time
+    next_event_time = time
 
   # 2. Update world state based on events that just finished -------------------
   new_tray = tray
@@ -106,7 +104,7 @@ def get_next_states(state):
   possible_b_tasks = get_barista_actions(new_state) if b_is_free else [b_status]
   possible_w_tasks = get_waiter_actions(new_state) if w_is_free else [w_status]
 
-  # 4. Create successor states for each combination of actions -----------------
+  # 4. Create successor states for each combination of tasks -------------------
   successors = []
 
   for b_task, w_task in itertools.product(possible_b_tasks, possible_w_tasks):
@@ -227,12 +225,17 @@ def main():
     False,  # Waiter tray: False, True
     (),  # Waiter inventory: (("tableX", "cold"|"hot"), ...)
     (
+      ("table4", "cold"),
+      ("table4", "cold"),
       ("table1", "cold"),
-      ("table1", "hot"),
       ("table1", "cold"),
+      ("table3", "hot"),
+      ("table3", "hot"),
+      ("table3", "hot"),
+      ("table3", "hot"),
     ),  # Orders: (("tableX", "cold"|"hot"), ...)
     (),  # Prepared drinks: (("tableX", "cold"|"hot"), ...)
-    ("table3", "table4"),  # Tables to clean: ("tableX", ...)
+    ("table2",),  # Tables to clean: ("tableX", ...)
   )
 
   time_start = perf_counter()
