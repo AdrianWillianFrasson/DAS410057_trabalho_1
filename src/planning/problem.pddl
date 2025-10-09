@@ -89,10 +89,10 @@
 
     (:goal
         (and
-            ;; All drinks delivered
+            ;; All drinks finished
             (forall
                 (?d - drink)
-                (drink-delivered ?d))
+                (drink-finished ?d))
 
             ;; All tables clean
             (forall

@@ -18,6 +18,7 @@
         (drink-ordered ?d - drink);; Drinks ordered by clients
         (drink-prepared ?d - drink) ;; Drinks prepared on counter
         (drink-delivered ?d - drink) ;; Drinks delivered to tables
+        (drink-finished ?d - drink) ;; Drinks finished
         (drink-destination ?d - drink ?t - table)
         (robot-busy ?r - robot)
         (waiter-tray ?r - robot-waiter)
@@ -162,6 +163,18 @@
             (at end (not (robot-busy ?r))))
     )
 
+    (:durative-action finish-drink
+        :parameters (?d - drink ?t - table)
+        :duration (= ?duration 4)
+        :condition (and
+            (at start (drink-delivered ?d))
+            (over all (drink-destination ?d ?t)))
+        :effect (and
+            (at start (not (drink-delivered ?d)))
+            (at end (drink-finished ?d))
+            (at end (not (table-clean ?t))))
+    )
+
     (:durative-action clean-table
         :parameters (?r - robot-waiter ?t - table)
         :duration (= ?duration (time-clean ?t))
@@ -170,7 +183,10 @@
             (at start (not (table-clean ?t)))
             (over all (not (waiter-tray ?r)))
             (over all (<= (waiter-inventory-size ?r) 0))
-            (over all (waiter-location ?r ?t)))
+            (over all (waiter-location ?r ?t))
+            (over all (not (exists
+                        (?d - drink)
+                        (and (drink-destination ?d ?t) (not (drink-finished ?d)))))))
         :effect (and
             (at start (robot-busy ?r))
             (at end (table-clean ?t))
