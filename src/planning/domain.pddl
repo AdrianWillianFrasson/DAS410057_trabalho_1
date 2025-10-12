@@ -1,5 +1,5 @@
 (define (domain cafe)
-    (:requirements :typing :durative-actions :numeric-fluents :negative-preconditions :equality :disjunctive-preconditions)
+    (:requirements :typing :durative-actions :fluents :negative-preconditions :equality :disjunctive-preconditions)
 
     (:types
         robot-barista robot-waiter - robot
@@ -15,24 +15,27 @@
     )
 
     (:predicates
-        (drink-ordered ?d - drink);; Drinks ordered by clients
-        (drink-prepared ?d - drink) ;; Drinks prepared on counter
-        (drink-delivered ?d - drink) ;; Drinks delivered to tables
-        (drink-finished ?d - drink) ;; Drinks finished
-        (drink-destination ?d - drink ?t - table)
-        (robot-busy ?r - robot)
-        (waiter-tray ?r - robot-waiter)
-        (waiter-location ?r - robot-waiter ?l - location)
-        (waiter-inventory ?r - robot-waiter ?d - drink)
-        (waiter-assigned ?r - robot-waiter ?t - table)
-        (table-clean ?t - table)
+        (drink-ordered ?d - drink) ; O cliente fez o pedido da bebida ?d
+        (drink-prepared ?d - drink) ; A bebida ?d foi preparada e está no balcão
+        (drink-delivered ?d - drink) ; A bebida ?d foi entregue ao cliente
+        (drink-finished ?d - drink) ; O cliente terminou de beber a bebida ?d
+        (drink-destination ?d - drink ?t - table) ; A bebida ?d deve ser servida na mesa ?t
+        (drink-still-hot ?d - drink) ; A bebida quente ?d ainda está quente (não esfriou)
+        (drink-is-hot ?d - drink) ; A bebida ?d é do tipo quente
+        (robot-busy ?r - robot) ; O robô ?r está ocupado (executando alguma tarefa)
+        (waiter-tray ?r - robot-waiter) ; O garçom ?r está usando uma bandeja
+        (waiter-location ?r - robot-waiter ?l - location) ; O garçom ?r está na localização ?l
+        (waiter-inventory ?r - robot-waiter ?d - drink) ; O garçom ?r está carregando a bebida ?d
+        (waiter-assigned ?r - robot-waiter ?t - table) ; O garçom ?r é responsável pela mesa ?t
+        (table-clean ?t - table) ; A mesa ?t está limpa
     )
 
     (:functions
-        (time-clean ?t - table)
-        (distance ?from - location ?to - location)
-        (waiter-speed ?r - robot-waiter)
-        (waiter-inventory-size ?r - robot-waiter)
+        (time-to-clean ?t - table) ; Tempo necessário para limpar a mesa ?t
+        (distance ?from - location ?to - location) ; Distância entre duas localizações (?from e ?to)
+        (waiter-speed ?r - robot-waiter) ; Velocidade atual do garçom robô ?r
+        (waiter-inventory-size ?r - robot-waiter) ; Quantidade de bebidas que o garçom ?r está carregando
+        (hot-time-left ?d - drink) ; Tempo restante para a bebida quente ?d ainda estar quente
     )
 
     (:durative-action prepare-drink-cold
@@ -58,7 +61,23 @@
             (at start (robot-busy ?r))
             (at start (not (drink-ordered ?d)))
             (at end (drink-prepared ?d))
+            (at end (drink-is-hot ?d))
+            (at end (assign (hot-time-left ?d) 4))
             (at end (not (robot-busy ?r))))
+    )
+
+    (:durative-action hot-drink-cooling
+        :parameters (?d - drink-hot)
+        :duration (= ?duration 4)
+        :condition (and
+            (at start (not (drink-ordered ?d)))
+            (at start (not (drink-delivered ?d)))
+            (at start (not (drink-finished ?d)))
+        )
+        :effect (and
+            (at start (drink-still-hot ?d))
+            (at end (decrease (hot-time-left ?d) 4)))
+
     )
 
     (:durative-action move-robot
@@ -110,7 +129,7 @@
 
     (:durative-action pickup-drink-gripper
         :parameters (?r - robot-waiter ?d - drink)
-        :duration (= ?duration 1)
+        :duration (= ?duration 0)
         :condition (and
             (at start (not (robot-busy ?r)))
             (at start (drink-prepared ?d))
@@ -127,7 +146,7 @@
 
     (:durative-action pickup-drink-tray
         :parameters (?r - robot-waiter ?d - drink)
-        :duration (= ?duration 1)
+        :duration (= ?duration 0)
         :condition (and
             (at start (not (robot-busy ?r)))
             (at start (drink-prepared ?d))
@@ -144,16 +163,18 @@
 
     (:durative-action deliver-drink
         :parameters (?r - robot-waiter ?d - drink ?t - table)
-        :duration (= ?duration 1)
+        :duration (= ?duration 0)
         :condition (and
             (at start (not (robot-busy ?r)))
             (at start (waiter-inventory ?r ?d))
+            (at start (not (and (drink-is-hot ?d) (not (drink-still-hot ?d)))))
+            (at start (not (and (drink-is-hot ?d) (not (> (hot-time-left ?d) 0)))))
             (at start (or (waiter-assigned ?r ?t) (not (exists
                             (?o - robot-waiter)
                             (waiter-assigned ?o ?t)))))
             (over all (table-clean ?t))
-            (over all (drink-destination ?d ?t))
-            (over all (waiter-location ?r ?t)))
+            (over all (waiter-location ?r ?t))
+            (over all (drink-destination ?d ?t)))
         :effect (and
             (at start (robot-busy ?r))
             (at start (not (waiter-inventory ?r ?d)))
@@ -177,7 +198,7 @@
 
     (:durative-action clean-table
         :parameters (?r - robot-waiter ?t - table)
-        :duration (= ?duration (time-clean ?t))
+        :duration (= ?duration (time-to-clean ?t))
         :condition (and
             (at start (not (robot-busy ?r)))
             (at start (not (table-clean ?t)))

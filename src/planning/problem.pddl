@@ -1,41 +1,29 @@
-(define (problem cafe-prob1)
+(define (problem cafe-problema)
     (:domain cafe)
 
     (:objects
         drink1 - drink-cold
         drink2 - drink-cold
-        drink3 - drink-cold
-        drink4 - drink-cold
-        ; drink5 - drink-hot
-        ; drink6 - drink-hot
-        ; drink7 - drink-hot
-        ; drink8 - drink-hot
-        )
+        drink3 - drink-hot
+        drink4 - drink-hot
+    )
 
     (:init
-        ;; Problem -----------------------------------------
+        ; Bebidas marcadas como pedidas
         (drink-ordered drink1)
         (drink-ordered drink2)
         (drink-ordered drink3)
         (drink-ordered drink4)
-        ; (drink-ordered drink5)
-        ; (drink-ordered drink6)
-        ; (drink-ordered drink7)
-        ; (drink-ordered drink8)
 
-        ; Destinations
-        (drink-destination drink1 table1)
-        (drink-destination drink2 table1)
-        (drink-destination drink3 table1)
-        (drink-destination drink4 table4)
-        ; (drink-destination drink5 table3)
-        ; (drink-destination drink6 table3)
-        ; (drink-destination drink7 table3)
-        ; (drink-destination drink8 table3)
+        ; Destino das bebidas
+        (drink-destination drink1 table3)
+        (drink-destination drink2 table3)
+        (drink-destination drink3 table3)
+        (drink-destination drink4 table3)
 
-        ; Clean tables
-        (table-clean table1)
-        ; (table-clean table2)
+        ; Mesas limpas ou sujas
+        ; (table-clean table1) <-- table1 está suja
+        (table-clean table2)
         (table-clean table3)
         (table-clean table4)
 
@@ -50,10 +38,10 @@
         (= (waiter-inventory-size waiter2) 0)
 
         ; Time to clean dirty tables
-        (= (time-clean table1) 2)
-        (= (time-clean table2) 2)
-        (= (time-clean table3) 4)
-        (= (time-clean table4) 2)
+        (= (time-to-clean table1) 2)
+        (= (time-to-clean table2) 2)
+        (= (time-to-clean table3) 4)
+        (= (time-to-clean table4) 2)
 
         ; Distances between locations
         (= (distance bar bar) 0)
@@ -89,17 +77,17 @@
 
     (:goal
         (and
-            ;; All drinks finished
+            ; Todos as bebidas terminadas
             (forall
                 (?d - drink)
                 (drink-finished ?d))
 
-            ;; All tables clean
+            ; Todas as mesas limpas
             (forall
                 (?t - table)
                 (table-clean ?t))
 
-            ;; All trays returned
+            ; Todos as bandejas devolvidas
             (forall
                 (?r - robot-waiter)
                 (not (waiter-tray ?r)))

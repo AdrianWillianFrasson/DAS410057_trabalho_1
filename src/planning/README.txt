@@ -1,3 +1,4 @@
+install VScode extension: https://marketplace.visualstudio.com/items?itemName=jan-dolejsi.pddl
 install docker
 
 > docker run -it --privileged -p 5555:5555 aiplanning/planutils:latest bash
