@@ -1,27 +1,33 @@
-(define (problem cafe-prob)
+(define (problem cafe-problema2)
     (:domain cafe)
 
     (:objects
         drink1 - drink-cold
         drink2 - drink-cold
+        drink3 - drink-hot
+        drink4 - drink-hot
     )
 
     (:init
         ; Bebidas marcadas como pedidas
         (drink-ordered drink1)
         (drink-ordered drink2)
+        (drink-ordered drink3)
+        (drink-ordered drink4)
 
         ; Destino das bebidas
-        (drink-destination drink1 table2)
-        (drink-destination drink2 table2)
+        (drink-destination drink1 table3)
+        (drink-destination drink2 table3)
+        (drink-destination drink3 table3)
+        (drink-destination drink4 table3)
 
         ; Mesas limpas ou sujas
-        (table-clean table1)
+        ; (table-clean table1) <-- Mesa suja
         (table-clean table2)
-        ; (table-clean table3)
-        ; (table-clean table4)
+        (table-clean table3)
+        (table-clean table4)
 
-        ;; Constants (Do not change) -----------------------
+        ; Constantes
         (waiter-location waiter1 table1)
         (waiter-location waiter2 table2)
 

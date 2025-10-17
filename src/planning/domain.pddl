@@ -129,7 +129,7 @@
 
     (:durative-action pickup-drink-gripper
         :parameters (?r - robot-waiter ?d - drink)
-        :duration (= ?duration 0)
+        :duration (= ?duration 0.1)
         :condition (and
             (at start (not (robot-busy ?r)))
             (at start (drink-prepared ?d))
@@ -146,7 +146,7 @@
 
     (:durative-action pickup-drink-tray
         :parameters (?r - robot-waiter ?d - drink)
-        :duration (= ?duration 0)
+        :duration (= ?duration 0.1)
         :condition (and
             (at start (not (robot-busy ?r)))
             (at start (drink-prepared ?d))
@@ -163,7 +163,7 @@
 
     (:durative-action deliver-drink
         :parameters (?r - robot-waiter ?d - drink ?t - table)
-        :duration (= ?duration 0)
+        :duration (= ?duration 0.1)
         :condition (and
             (at start (not (robot-busy ?r)))
             (at start (waiter-inventory ?r ?d))
